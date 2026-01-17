@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Landing Factory • Autopost</title>
+  <style>
+    :root{--bg:#0b1020;--card:#111833;--text:#e7ecff;--muted:#a7b0d6;--border:#243055;--accent:#7c5cff}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input,textarea,select{background:#0f1630;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+    button{background:var(--accent);border:0;color:white;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+    h1{margin:0 0 4px 0;font-size:22px}
+    h2{margin:0 0 10px 0;font-size:16px}
+    .muted{color:var(--muted);font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid var(--border);padding:10px;text-align:left;vertical-align:top}
+    .tag{display:inline-block;padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--muted)}
+    .err{color:#ffb4b4}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between; margin-bottom:12px;">
+      <div>
+        <h1>Autoposting</h1>
+        <div class="muted">Schedules for blog/news. Generates pages and republishes site.</div>
+      </div>
+      <div class="row">
+        <a class="tag" href="/admin">Home</a>
+        <a class="tag" href="/admin/analytics">Analytics</a>
+        <a class="tag" href="/admin/themes">Themes</a>
+        <a class="tag" href="/admin/links">Links</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Admin token</h2>
+      <div class="row">
+        <input id="token" placeholder="ADMIN_TOKEN" style="min-width:320px" />
+        <button onclick="saveToken()">Save</button>
+        <span class="muted" id="tokmsg"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Create schedule</h2>
+      <div class="row">
+        <select id="site"></select>
+        <select id="section">
+          <option value="blog">blog</option>
+          <option value="news">news</option>
+        </select>
+        <select id="cadenceType">
+          <option value="every_n_days">every N days</option>
+          <option value="weekly">weekly</option>
+          <option value="cron">cron</option>
+        </select>
+        <input id="cadenceValue" placeholder='e.g. 3 | MON | */2 * * * *' style="min-width:240px" />
+        <label class="row"><input type="checkbox" id="requireApproval" /> <span class="muted">require approval</span></label>
+        <button onclick="createSchedule()">Create</button>
+      </div>
+      <div class="muted">For weekly: use MON..SUN. For cron: 5-field cron string.</div>
+    </div>
+
+    <div class="card">
+      <h2>Schedules</h2>
+      <div id="schedules" class="muted">Loading…</div>
+    </div>
+
+    <div class="card">
+      <h2>Recent runs</h2>
+      <div id="runs" class="muted">Loading…</div>
+    </div>
+  </div>
+
+<script>
+  const qs = (s)=>document.querySelector(s);
+  function token(){ return localStorage.getItem('ADMIN_TOKEN') || ''; }
+  function headers(){ const h={'content-type':'application/json'}; const t=token(); if(t) h['X-Admin-Token']=t; return h; }
+  function saveToken(){ localStorage.setItem('ADMIN_TOKEN', qs('#token').value.trim()); qs('#tokmsg').textContent='Saved'; setTimeout(()=>qs('#tokmsg').textContent='',1200); load(); }
+  qs('#token').value = token();
+
+  async function loadSites(){
+    const r = await fetch('/sites', {headers: headers()});
+    if(!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    qs('#site').innerHTML = data.sites.map(s=>`<option value="${s.id}">${s.domain.domainName}</option>`).join('');
+  }
+
+  async function loadSchedules(){
+    const r = await fetch('/autopost/schedules', {headers: headers()});
+    if(!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    if(!data.schedules.length){ qs('#schedules').innerHTML='<div class="muted">No schedules.</div>'; return; }
+    const rows = data.schedules.map(sc=>{
+      return `<tr>
+        <td>${sc.site.domain.domainName}</td>
+        <td>${sc.section}</td>
+        <td>${sc.cadenceType}</td>
+        <td><span class="muted">${JSON.stringify(sc.cadenceJson)}</span></td>
+        <td>${sc.requireApproval ? 'yes':'no'}</td>
+        <td>${sc.isEnabled ? 'enabled':'disabled'}</td>
+        <td><button class="secondary" onclick="runNow('${sc.id}')">Run now</button></td>
+      </tr>`;
+    }).join('');
+    qs('#schedules').innerHTML = `<table><thead><tr><th>Site</th><th>Section</th><th>Cadence</th><th>Value</th><th>Approval</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  async function loadRuns(){
+    const r = await fetch('/autopost/runs', {headers: headers()});
+    if(!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    if(!data.runs.length){ qs('#runs').innerHTML='<div class="muted">No runs yet.</div>'; return; }
+    const rows = data.runs.map(x=>`<tr><td>${x.createdAt}</td><td>${x.schedule.site.domain.domainName}</td><td>${x.schedule.section}</td><td>${x.status}</td><td><span class="muted">${x.logs||''}</span></td></tr>`).join('');
+    qs('#runs').innerHTML = `<table><thead><tr><th>Created</th><th>Site</th><th>Section</th><th>Status</th><th>Logs</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  async function createSchedule(){
+    const siteId = qs('#site').value;
+    const section = qs('#section').value;
+    const cadenceType = qs('#cadenceType').value;
+    const cadenceValue = qs('#cadenceValue').value.trim();
+    const requireApproval = qs('#requireApproval').checked;
+    const payload = { siteId, section, cadenceType, cadenceValue, requireApproval };
+    const r = await fetch('/autopost/schedules', {method:'POST', headers: headers(), body: JSON.stringify(payload)});
+    if(!r.ok) { alert(await r.text()); return; }
+    qs('#cadenceValue').value='';
+    await loadSchedules();
+  }
+
+  async function runNow(id){
+    const r = await fetch(`/autopost/schedules/${id}/run-now`, {method:'POST', headers: headers()});
+    if(!r.ok) { alert(await r.text()); return; }
+    await loadRuns();
+    await loadSchedules();
+  }
+
+  async function load(){
+    await loadSites();
+    await loadSchedules();
+    await loadRuns();
+  }
+
+  load().catch(e=>{ qs('#schedules').innerHTML = `<div class="err">${String(e)}</div>`; });
+</script>
+</body>
+</html>

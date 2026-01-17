@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Landing Factory • Links</title>
+  <style>
+    :root{--bg:#0b1020;--card:#111833;--text:#e7ecff;--muted:#a7b0d6;--border:#243055;--accent:#7c5cff}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input,textarea,select{background:#0f1630;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+    textarea{width:100%;min-height:90px}
+    button{background:var(--accent);border:0;color:white;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+    h1{margin:0 0 4px 0;font-size:22px}
+    h2{margin:0 0 10px 0;font-size:16px}
+    .muted{color:var(--muted);font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid var(--border);padding:10px;text-align:left;vertical-align:top}
+    .tag{display:inline-block;padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between; margin-bottom:12px;">
+      <div>
+        <h1>Links Manager</h1>
+        <div class="muted">v0.4 • library, assignments, bulk preview/apply/undo</div>
+      </div>
+      <div class="row">
+        <a class="tag" href="/admin">&larr; Admin</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Admin token</h2>
+      <div class="row">
+        <input id="token" style="min-width:360px" placeholder="ADMIN_TOKEN" />
+        <button id="saveToken">Save</button>
+        <button class="secondary" id="clearToken">Clear</button>
+        <span class="muted">Saved in localStorage</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Link Library</h2>
+      <div class="row">
+        <input id="linkName" placeholder="Name" />
+        <input id="linkUrl" style="min-width:360px" placeholder="https://example.com" />
+        <select id="linkKind">
+          <option value="anchor">anchor</option>
+          <option value="url_display">url_display</option>
+          <option value="button">button</option>
+          <option value="mention">mention</option>
+        </select>
+        <button id="createLink">Create</button>
+        <span id="createLinkResult" class="muted"></span>
+        <button class="secondary" id="refreshLib">Refresh</button>
+      </div>
+      <div style="overflow:auto;margin-top:10px;">
+        <table>
+          <thead><tr><th>Name</th><th>Kind</th><th>Target</th><th>ID</th></tr></thead>
+          <tbody id="libTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Assignments</h2>
+      <div class="row">
+        <select id="siteSelect" style="min-width:360px"></select>
+        <select id="placement">
+          <option value="HERO_CTA">HERO_CTA</option>
+          <option value="FOOTER">FOOTER</option>
+          <option value="SIDEBAR">SIDEBAR</option>
+          <option value="RESOURCES">RESOURCES</option>
+        </select>
+        <select id="linkSelect" style="min-width:360px"></select>
+        <input id="displayText" placeholder="display text override (optional)" style="min-width:260px" />
+        <button id="assignLink">Assign</button>
+        <button class="secondary" id="refreshAssign">Refresh</button>
+      </div>
+      <div style="overflow:auto;margin-top:10px;">
+        <table>
+          <thead><tr><th>Site</th><th>Placement</th><th>Target</th><th>Text</th><th>ID</th></tr></thead>
+          <tbody id="assignTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bulk replace</h2>
+      <div class="muted">Preview then apply. This edits existing records (library URLs + assignment text + anchor set variants if any).</div>
+      <div class="row" style="margin-top:10px;">
+        <select id="bulkMode">
+          <option value="url_contains">Replace URLs containing</option>
+          <option value="text_contains">Replace display text containing</option>
+        </select>
+        <input id="bulkFind" placeholder="find" style="min-width:260px" />
+        <input id="bulkReplace" placeholder="replace with" style="min-width:260px" />
+        <button id="bulkPreview">Preview</button>
+        <button id="bulkApply">Apply</button>
+        <button class="secondary" id="bulkUndo">Undo last</button>
+        <span id="bulkResult" class="muted"></span>
+      </div>
+      <pre id="bulkPreviewBox" class="mono" style="white-space:pre-wrap; margin-top:10px; background:#0f1630; border:1px solid var(--border); border-radius:12px; padding:10px;"></pre>
+    </div>
+
+  </div>
+
+<script>
+  const lsKey = 'lf_admin_token';
+  const tokenInput = document.getElementById('token');
+  tokenInput.value = localStorage.getItem(lsKey) || '';
+  function getToken(){ return (localStorage.getItem(lsKey) || '').trim(); }
+  async function api(path, opts={}){
+    const t = getToken();
+    const headers = Object.assign({'content-type':'application/json'}, opts.headers||{});
+    if(t) headers['X-Admin-Token'] = t;
+    const res = await fetch(path, Object.assign({}, opts, {headers}));
+    if(!res.ok){ throw new Error(await res.text()); }
+    const ct = res.headers.get('content-type')||'';
+    return ct.includes('application/json') ? res.json() : res.text();
+  }
+  document.getElementById('saveToken').onclick = () => localStorage.setItem(lsKey, tokenInput.value.trim());
+  document.getElementById('clearToken').onclick = () => { localStorage.removeItem(lsKey); tokenInput.value=''; };
+
+  async function loadLib(){
+    const out = await api('/links/library');
+    const tbody = document.getElementById('libTable');
+    tbody.innerHTML='';
+    const sel = document.getElementById('linkSelect');
+    sel.innerHTML='';
+    for(const l of out.links){
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td><span class="tag">'+escapeHtml(l.name)+'</span></td><td>'+escapeHtml(l.linkKind)+'</td><td class="mono">'+escapeHtml(l.targetUrl)+'</td><td class="mono">'+escapeHtml(l.id)+'</td>';
+      tbody.appendChild(tr);
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = l.name+' → '+l.targetUrl;
+      sel.appendChild(opt);
+    }
+  }
+
+  async function loadSites(){
+    const out = await api('/sites');
+    const sel = document.getElementById('siteSelect');
+    sel.innerHTML='';
+    for(const s of out.sites){
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = (s.domain?.domainName || s.id)+' ('+s.status+')';
+      sel.appendChild(opt);
+    }
+  }
+
+  async function loadAssignments(){
+    const siteId = document.getElementById('siteSelect').value;
+    if(!siteId) return;
+    const out = await api('/links/assignments?siteId='+encodeURIComponent(siteId));
+    const tbody = document.getElementById('assignTable');
+    tbody.innerHTML='';
+    for(const a of out.assignments){
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td><span class="tag">'+escapeHtml(a.site.domain.domainName)+'</span></td><td>'+escapeHtml(a.placement)+'</td><td class="mono">'+escapeHtml(a.linkLibrary.targetUrl)+'</td><td>'+escapeHtml(a.displayTextOverride || '')+'</td><td class="mono">'+escapeHtml(a.id)+'</td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[c]));
+  }
+
+  document.getElementById('refreshLib').onclick = loadLib;
+  document.getElementById('refreshAssign').onclick = loadAssignments;
+  document.getElementById('siteSelect').onchange = loadAssignments;
+
+  document.getElementById('createLink').onclick = async () => {
+    const name = document.getElementById('linkName').value.trim();
+    const targetUrl = document.getElementById('linkUrl').value.trim();
+    const linkKind = document.getElementById('linkKind').value;
+    const el = document.getElementById('createLinkResult');
+    el.textContent='...';
+    try{
+      await api('/links/library', {method:'POST', body: JSON.stringify({name, targetUrl, linkKind})});
+      el.textContent='created';
+      await loadLib();
+    }catch(e){ el.textContent='error'; alert(e.message); }
+  };
+
+  document.getElementById('assignLink').onclick = async () => {
+    const siteId = document.getElementById('siteSelect').value;
+    const linkLibraryId = document.getElementById('linkSelect').value;
+    const placement = document.getElementById('placement').value;
+    const displayTextOverride = document.getElementById('displayText').value.trim();
+    try{
+      await api('/links/assignments', {method:'POST', body: JSON.stringify({siteId, linkLibraryId, placement, displayTextOverride: displayTextOverride || null})});
+      await loadAssignments();
+    }catch(e){ alert(e.message); }
+  };
+
+  document.getElementById('bulkPreview').onclick = async () => {
+    const mode = document.getElementById('bulkMode').value;
+    const find = document.getElementById('bulkFind').value;
+    const replace = document.getElementById('bulkReplace').value;
+    const out = await api('/links/bulk/preview', {method:'POST', body: JSON.stringify({mode, find, replace})});
+    document.getElementById('bulkPreviewBox').textContent = JSON.stringify(out, null, 2);
+    document.getElementById('bulkResult').textContent = 'preview: '+(out.totalAffected || 0);
+  };
+
+  document.getElementById('bulkApply').onclick = async () => {
+    const mode = document.getElementById('bulkMode').value;
+    const find = document.getElementById('bulkFind').value;
+    const replace = document.getElementById('bulkReplace').value;
+    const out = await api('/links/bulk/apply', {method:'POST', body: JSON.stringify({mode, find, replace})});
+    document.getElementById('bulkResult').textContent = 'applied: '+(out.totalAffected || 0);
+    await loadLib();
+    await loadAssignments();
+  };
+
+  document.getElementById('bulkUndo').onclick = async () => {
+    const out = await api('/links/bulk/undo-last', {method:'POST'});
+    document.getElementById('bulkResult').textContent = 'undo: '+(out.restored || 0);
+    await loadLib();
+    await loadAssignments();
+  };
+
+  (async () => {
+    try{
+      await loadLib();
+      await loadSites();
+      await loadAssignments();
+    }catch(e){ console.error(e); }
+  })();
+</script>
+</body>
+</html>

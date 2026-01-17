@@ -1,0 +1,15 @@
+{
+  "name": "landing-factory",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "packages/templates/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:renderer": "npm --workspace apps/renderer run dev",
+    "build": "npm -ws run build",
+    "lint": "npm -ws run lint"
+  }
+}

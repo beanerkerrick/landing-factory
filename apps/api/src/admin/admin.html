@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Landing Factory • Admin</title>
+  <style>
+    :root{--bg:#0b1020;--card:#111833;--text:#e7ecff;--muted:#a7b0d6;--border:#243055;--accent:#7c5cff}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input,textarea,select{background:#0f1630;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+    textarea{width:100%;min-height:90px}
+    button{background:var(--accent);border:0;color:white;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+    h1{margin:0 0 4px 0;font-size:22px}
+    h2{margin:0 0 10px 0;font-size:16px}
+    .muted{color:var(--muted);font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid var(--border);padding:10px;text-align:left;vertical-align:top}
+    .tag{display:inline-block;padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between; margin-bottom:12px;">
+      <div>
+        <h1>Landing Factory</h1>
+        <div class="muted">Admin • SSG platform</div>
+      </div>
+      <div class="row">
+        <a class="tag" href="/admin/links">Links</a>
+        <a class="tag" href="/admin/themes">Themes</a>
+        <a class="tag" href="/admin/analytics">Analytics</a>
+        <a class="tag" href="/admin/autopost">Autopost</a>
+        <a class="tag" href="/admin/design-import">Design Import</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Access</h2>
+      <div class="row">
+        <input id="token" placeholder="ADMIN_TOKEN" style="min-width:360px" />
+        <button id="saveToken">Save</button>
+        <button class="secondary" id="clearToken">Clear</button>
+        <span class="muted">Stored in localStorage</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bulk import domains</h2>
+      <div class="muted">One per line. Example: example.local</div>
+      <textarea id="domains"></textarea>
+      <div class="row">
+        <select id="domainStatus">
+          <option value="active">active</option>
+          <option value="draft">draft</option>
+          <option value="archived">archived</option>
+        </select>
+        <button id="importDomains">Import</button>
+        <span id="importResult" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <h2>Domains</h2>
+        <button class="secondary" id="refreshDomains">Refresh</button>
+      </div>
+      <table>
+        <thead><tr><th>Domain</th><th>Status</th><th>ID</th></tr></thead>
+        <tbody id="domainsTable"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Create site</h2>
+      <div class="row">
+        <select id="domainSelect" style="min-width:360px"></select>
+        <select id="templateKey" style="min-width:260px"></select>
+        <input id="siteTheme" placeholder="Theme" style="min-width:260px" />
+        <select id="siteLang"><option value="ru">ru</option><option value="en">en</option></select>
+        <button id="createSite">Create</button>
+        <span id="createSiteResult" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sites</h2>
+      <div class="row">
+        <select id="siteSelect" style="min-width:420px"></select>
+        <button class="secondary" id="refreshSites">Refresh</button>
+        <button id="publishSite">Publish (SSG build)</button>
+        <span id="publishResult" class="muted"></span>
+      </div>
+      <div class="muted">Tip: point domain to server or add to /etc/hosts for local test.</div>
+    </div>
+
+  </div>
+
+<script>
+  const lsKey = 'lf_admin_token';
+  const tokenInput = document.getElementById('token');
+  tokenInput.value = localStorage.getItem(lsKey) || '';
+  document.getElementById('saveToken').onclick = () => localStorage.setItem(lsKey, tokenInput.value.trim());
+  document.getElementById('clearToken').onclick = () => { localStorage.removeItem(lsKey); tokenInput.value=''; };
+
+  function getToken(){ return (localStorage.getItem(lsKey) || '').trim(); }
+  async function api(path, opts={}){
+    const t = getToken();
+    const headers = Object.assign({'content-type':'application/json'}, opts.headers||{});
+    if(t) headers['X-Admin-Token'] = t;
+    const res = await fetch(path, Object.assign({}, opts, {headers}));
+    if(!res.ok){ throw new Error(await res.text()); }
+    const ct = res.headers.get('content-type')||'';
+    return ct.includes('application/json') ? res.json() : res.text();
+  }
+
+  async function loadDomains(){
+    const out = await api('/domains');
+    const tbody = document.getElementById('domainsTable');
+    tbody.innerHTML='';
+    const sel = document.getElementById('domainSelect');
+    sel.innerHTML='';
+    for(const d of out.domains){
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td><span class="tag">'+d.domainName+'</span></td><td>'+d.status+'</td><td class="mono">'+d.id+'</td>';
+      tbody.appendChild(tr);
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.domainName + ' ('+d.status+')';
+      sel.appendChild(opt);
+    }
+  }
+
+  async function loadTemplates(){
+    const out = await api('/templates');
+    const sel = document.getElementById('templateKey');
+    sel.innerHTML='';
+    for(const t of out.templates){
+      const opt = document.createElement('option');
+      opt.value = t.key;
+      opt.textContent = t.name + ' ('+t.key+')';
+      sel.appendChild(opt);
+    }
+  }
+
+  async function loadSites(){
+    const out = await api('/sites');
+    const sel = document.getElementById('siteSelect');
+    sel.innerHTML='';
+    for(const s of out.sites){
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = (s.domain?.domainName || s.id) + ' • ' + s.status;
+      sel.appendChild(opt);
+    }
+  }
+
+  document.getElementById('refreshDomains').onclick = () => loadDomains().catch(e=>alert(e.message));
+  document.getElementById('refreshSites').onclick = () => loadSites().catch(e=>alert(e.message));
+
+  document.getElementById('importDomains').onclick = async () => {
+    const list = document.getElementById('domains').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const status = document.getElementById('domainStatus').value;
+    const el = document.getElementById('importResult');
+    el.textContent = '...';
+    try{
+      const out = await api('/domains/bulk-import', {method:'POST', body: JSON.stringify({domains:list, defaults:{status}})});
+      el.textContent = 'imported: '+out.count;
+      await loadDomains();
+    }catch(e){ el.textContent='error'; alert(e.message); }
+  };
+
+  document.getElementById('createSite').onclick = async () => {
+    const domainId = document.getElementById('domainSelect').value;
+    const templateKey = document.getElementById('templateKey').value;
+    const theme = document.getElementById('siteTheme').value.trim() || 'Untitled';
+    const language = document.getElementById('siteLang').value;
+    const el = document.getElementById('createSiteResult');
+    el.textContent='...';
+    try{
+      await api('/sites', {method:'POST', body: JSON.stringify({domainId, templateKey, theme, language})});
+      el.textContent='created';
+      await loadSites();
+    }catch(e){ el.textContent='error'; alert(e.message); }
+  };
+
+  document.getElementById('publishSite').onclick = async () => {
+    const siteId = document.getElementById('siteSelect').value;
+    const el = document.getElementById('publishResult');
+    el.textContent='building...';
+    try{
+      const out = await api('/sites/'+encodeURIComponent(siteId)+'/publish', {method:'POST'});
+      el.textContent='build: '+out.buildId;
+    }catch(e){ el.textContent='error'; alert(e.message); }
+  };
+
+  (async () => {
+    try{
+      await loadTemplates();
+      await loadDomains();
+      await loadSites();
+    }catch(e){ console.error(e); }
+  })();
+</script>
+</body>
+</html>

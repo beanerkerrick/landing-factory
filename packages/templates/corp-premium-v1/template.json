@@ -1,0 +1,36 @@
+{
+  "key": "tmpl_corp_premium_v1",
+  "name": "Corporate Premium",
+  "version": 1,
+  "siteType": "corp",
+  "supportedLanguages": ["ru"],
+  "routes": [
+    { "route": "/", "pageType": "home", "required": true },
+    { "route": "/contacts", "pageType": "contacts", "required": true }
+  ],
+  "blocksCatalog": [
+    { "blockType": "hero", "schema": "HeroBlock", "allowedPlacements": ["home", "contacts"], "requiredIn": ["home"] },
+    { "blockType": "content", "schema": "ContentBlock", "allowedPlacements": ["home", "contacts"], "requiredIn": [] }
+  ],
+  "defaultPageLayouts": {
+    "home": ["hero", "content"],
+    "contacts": ["hero", "content"]
+  },
+  "slots": {
+    "links": ["HERO_CTA", "FOOTER"],
+    "analytics": ["HEAD", "BODY_END"]
+  },
+  "seoRules": {
+    "metaTemplates": {
+      "title": "{h1} — {brandOrSite}",
+      "description": "{summary} | {brandOrSite}",
+      "canonicalPolicy": "self"
+    },
+    "schemaToggles": { "WebSite": true, "Organization": true, "WebPage": true, "FAQPage": "auto" }
+  },
+  "aiPromptPreset": {
+    "toneDefaults": ["premium", "clear", "expert"],
+    "contentConstraints": { "noKeywordSpam": true, "minWords": 600 }
+  },
+  "themeCompat": { "supportsMode": ["light", "dark"], "supportsComponentStylePresets": true }
+}

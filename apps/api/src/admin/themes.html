@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Landing Factory • Themes</title>
+<style>
+:root{--bg:#0b1020;--card:#111833;--text:#e7ecff;--muted:#a7b0d6;--border:#243055;--accent:#7c5cff}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1100px;margin:0 auto;padding:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input,textarea,select{background:#0f1630;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+textarea{width:100%;min-height:110px}
+button{background:var(--accent);border:0;color:white;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+button.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+.muted{color:var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid var(--border);padding:10px;text-align:left;vertical-align:top}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+.small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+    <div>
+      <h1 style="margin:0 0 4px 0;font-size:22px;">Themes & Presets</h1>
+      <div class="muted">Theme presets + Component style presets (v0.5)</div>
+    </div>
+    <div class="row"><a class="muted" href="/admin">Admin</a><a class="muted" href="/admin/links">Links</a><a class="muted" href="/admin/design-import">Design Import</a></div>
+  </div>
+
+  <div class="card">
+    <b>Create Theme Preset</b>
+    <div class="row" style="margin-top:8px;">
+      <input id="themeName" placeholder="Theme name" style="min-width:260px" />
+      <button id="createTheme">Create</button>
+      <span id="themeCreateRes" class="muted"></span>
+    </div>
+    <textarea id="themeJson" class="mono" placeholder='Paste theme.json here'></textarea>
+    <div class="small">Tip: keep tokens within whitelist (mode/light, radius xl, etc.).</div>
+  </div>
+
+  <div class="card">
+    <b>Create Component Style Preset</b>
+    <div class="row" style="margin-top:8px;">
+      <input id="presetName" placeholder="Preset name" style="min-width:260px" />
+      <button id="createPreset">Create</button>
+      <span id="presetCreateRes" class="muted"></span>
+    </div>
+    <textarea id="presetJson" class="mono" placeholder='Paste component_style_preset.json here'></textarea>
+    <div class="small">Example: {"hero":{"cta_style":"gradient"},"cards":{"radius":"xl","shadow":"soft"}}</div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;">
+      <b>Library</b>
+      <div class="row"><button class="secondary" id="refresh">Refresh</button></div>
+    </div>
+    <div class="row" style="gap:24px;align-items:flex-start;margin-top:10px;">
+      <div style="flex:1;min-width:320px;">
+        <div class="muted" style="margin-bottom:8px;">Themes</div>
+        <table><thead><tr><th>Name</th><th>ID</th></tr></thead><tbody id="themesTbl"></tbody></table>
+      </div>
+      <div style="flex:1;min-width:320px;">
+        <div class="muted" style="margin-bottom:8px;">Component Presets</div>
+        <table><thead><tr><th>Name</th><th>ID</th></tr></thead><tbody id="presetsTbl"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>Assign to site</b>
+    <div class="row" style="margin-top:8px;">
+      <select id="siteSelect" style="min-width:280px"></select>
+      <select id="themeSelect" style="min-width:280px"></select>
+      <select id="presetSelect" style="min-width:280px"></select>
+      <button id="assign">Assign</button>
+      <button class="secondary" id="publish">Publish</button>
+      <span id="assignRes" class="muted"></span>
+    </div>
+    <div class="small">Assign updates site config; Publish triggers SSG build to apply styles.</div>
+  </div>
+</div>
+
+<script>
+const lsKey='lf_admin_token';
+function token(){return (localStorage.getItem(lsKey)||'').trim();}
+async function api(path, opts={}){
+  const headers=Object.assign({'content-type':'application/json'}, opts.headers||{});
+  const t=token(); if(t) headers['X-Admin-Token']=t;
+  const res=await fetch(path, Object.assign({}, opts, {headers}));
+  if(!res.ok) throw new Error(await res.text());
+  const ct=res.headers.get('content-type')||'';
+  return ct.includes('application/json')?res.json():res.text();
+}
+
+async function load(){
+  const [t, p, s] = await Promise.all([api('/themes'), api('/component-style-presets'), api('/sites')]);
+
+  const themesTbl=document.getElementById('themesTbl'); themesTbl.innerHTML='';
+  const presetsTbl=document.getElementById('presetsTbl'); presetsTbl.innerHTML='';
+
+  const themeSel=document.getElementById('themeSelect'); themeSel.innerHTML='';
+  const presetSel=document.getElementById('presetSelect'); presetSel.innerHTML='';
+
+  for(const th of t.themes){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+escapeHtml(th.name)+'</td><td class="mono">'+escapeHtml(th.id)+'</td>';
+    themesTbl.appendChild(tr);
+    const opt=document.createElement('option'); opt.value=th.id; opt.textContent=th.name;
+    themeSel.appendChild(opt);
+  }
+
+  for(const pr of p.presets){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+escapeHtml(pr.name)+'</td><td class="mono">'+escapeHtml(pr.id)+'</td>';
+    presetsTbl.appendChild(tr);
+    const opt=document.createElement('option'); opt.value=pr.id; opt.textContent=pr.name;
+    presetSel.appendChild(opt);
+  }
+
+  const siteSel=document.getElementById('siteSelect'); siteSel.innerHTML='';
+  for(const site of s.sites){
+    const opt=document.createElement('option');
+    opt.value=site.id;
+    opt.textContent=(site.domain?.domainName||site.id)+' ('+site.status+')';
+    siteSel.appendChild(opt);
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\'/g,'&#39;');
+}
+
+document.getElementById('refresh').onclick=()=>load().catch(e=>alert(e.message));
+
+document.getElementById('createTheme').onclick=async()=>{
+  const name=document.getElementById('themeName').value.trim();
+  const jsonText=document.getElementById('themeJson').value.trim();
+  const out=document.getElementById('themeCreateRes'); out.textContent='...';
+  try{
+    const json=JSON.parse(jsonText);
+    await api('/themes',{method:'POST',body:JSON.stringify({name, json})});
+    out.textContent='created';
+    await load();
+  }catch(e){ out.textContent='error'; alert(e.message);} 
+};
+
+document.getElementById('createPreset').onclick=async()=>{
+  const name=document.getElementById('presetName').value.trim();
+  const jsonText=document.getElementById('presetJson').value.trim();
+  const out=document.getElementById('presetCreateRes'); out.textContent='...';
+  try{
+    const json=JSON.parse(jsonText);
+    await api('/component-style-presets',{method:'POST',body:JSON.stringify({name, json})});
+    out.textContent='created';
+    await load();
+  }catch(e){ out.textContent='error'; alert(e.message);} 
+};
+
+document.getElementById('assign').onclick=async()=>{
+  const siteId=document.getElementById('siteSelect').value;
+  const themePresetId=document.getElementById('themeSelect').value;
+  const componentStylePresetId=document.getElementById('presetSelect').value;
+  const out=document.getElementById('assignRes'); out.textContent='...';
+  try{
+    await api('/sites/'+encodeURIComponent(siteId)+'/style',{method:'PATCH',body:JSON.stringify({themePresetId, componentStylePresetId})});
+    out.textContent='assigned';
+  }catch(e){ out.textContent='error'; alert(e.message);} 
+};
+
+document.getElementById('publish').onclick=async()=>{
+  const siteId=document.getElementById('siteSelect').value;
+  const out=document.getElementById('assignRes'); out.textContent='publishing...';
+  try{
+    const r=await api('/sites/'+encodeURIComponent(siteId)+'/publish',{method:'POST'});
+    out.textContent='published to '+(r.artifactPath||'');
+  }catch(e){ out.textContent='error'; alert(e.message);} 
+};
+
+load().catch(e=>console.error(e));
+</script>
+</body>
+</html>

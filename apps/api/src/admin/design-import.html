@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Landing Factory • Design Import</title>
+<style>
+:root{--bg:#0b1020;--card:#111833;--text:#e7ecff;--muted:#a7b0d6;--border:#243055;--accent:#7c5cff}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:var(--bg);color:var(--text)}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1100px;margin:0 auto;padding:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input,textarea,select{background:#0f1630;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+textarea{width:100%;min-height:150px}
+button{background:var(--accent);border:0;color:white;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+button.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+.muted{color:var(--muted);font-size:13px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+.small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+    <div>
+      <h1 style="margin:0 0 4px 0;font-size:22px;">Design Import</h1>
+      <div class="muted">Manual v1: paste theme.json + component_style_preset.json, create presets, apply to site, publish.</div>
+    </div>
+    <div class="row"><a class="muted" href="/admin">Admin</a><a class="muted" href="/admin/themes">Themes</a></div>
+  </div>
+
+  <div class="card">
+    <b>1) Paste JSON</b>
+    <div class="row" style="margin-top:8px;">
+      <input id="themeName" placeholder="Theme name" style="min-width:260px" />
+      <input id="presetName" placeholder="Preset name" style="min-width:260px" />
+      <button id="run">Import</button>
+      <span id="runResult" class="muted"></span>
+    </div>
+    <div class="row" style="margin-top:10px; align-items:stretch;">
+      <div style="flex:1; min-width:320px;">
+        <div class="small">theme.json</div>
+        <textarea id="themeJson" class="mono" placeholder='{"name":"Premium Neutral","mode":"light","colors":{...}}'></textarea>
+      </div>
+      <div style="flex:1; min-width:320px;">
+        <div class="small">component_style_preset.json</div>
+        <textarea id="presetJson" class="mono" placeholder='{"hero":{"cta_style":"gradient"},"cards":{"radius":"xl"}}'></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>2) Apply to site</b>
+    <div class="muted">Choose a site and apply the IDs returned by import (or paste manually).</div>
+    <div class="row" style="margin-top:8px;">
+      <select id="siteSelect" style="min-width:360px"></select>
+      <input id="themeId" placeholder="themePresetId" class="mono" style="min-width:360px" />
+      <input id="presetId" placeholder="componentStylePresetId" class="mono" style="min-width:360px" />
+      <button id="apply">Apply</button>
+      <button id="publish" class="secondary">Publish</button>
+      <span id="applyResult" class="muted"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+const lsKey='lf_admin_token';
+function getToken(){return (localStorage.getItem(lsKey)||'').trim();}
+async function api(path, opts={}){
+  const headers=Object.assign({'content-type':'application/json'}, opts.headers||{});
+  const t=getToken(); if(t) headers['X-Admin-Token']=t;
+  const res=await fetch(path, Object.assign({}, opts, {headers}));
+  if(!res.ok) throw new Error(await res.text());
+  const ct=res.headers.get('content-type')||'';
+  return ct.includes('application/json')?res.json():res.text();
+}
+
+async function loadSites(){
+  const s=await api('/sites');
+  const ss=document.getElementById('siteSelect'); ss.innerHTML='';
+  for(const site of s.sites){
+    const opt=document.createElement('option');
+    opt.value=site.id;
+    opt.textContent=(site.domain?.domainName||site.id)+' ('+site.status+')';
+    ss.appendChild(opt);
+  }
+}
+
+document.getElementById('run').onclick=async()=>{
+  const themeName=document.getElementById('themeName').value.trim()||'Imported Theme';
+  const presetName=document.getElementById('presetName').value.trim()||'Imported Preset';
+  const runResult=document.getElementById('runResult'); runResult.textContent='...';
+  try{
+    const themeJson=JSON.parse(document.getElementById('themeJson').value);
+    const presetJson=JSON.parse(document.getElementById('presetJson').value);
+    const out=await api('/design-import/manual',{method:'POST',body:JSON.stringify({themeName,themeJson,presetName,presetJson})});
+    document.getElementById('themeId').value=out.themePresetId;
+    document.getElementById('presetId').value=out.componentStylePresetId;
+    runResult.textContent='ok';
+  }catch(e){runResult.textContent='error'; alert(e.message);} 
+};
+
+document.getElementById('apply').onclick=async()=>{
+  const siteId=document.getElementById('siteSelect').value;
+  const themePresetId=document.getElementById('themeId').value.trim();
+  const componentStylePresetId=document.getElementById('presetId').value.trim();
+  const applyResult=document.getElementById('applyResult'); applyResult.textContent='...';
+  try{
+    await api('/sites/'+encodeURIComponent(siteId)+'/style',{method:'PATCH',body:JSON.stringify({themePresetId: themePresetId||null, componentStylePresetId: componentStylePresetId||null})});
+    applyResult.textContent='applied';
+  }catch(e){applyResult.textContent='error'; alert(e.message);} 
+};
+
+document.getElementById('publish').onclick=async()=>{
+  const siteId=document.getElementById('siteSelect').value;
+  const applyResult=document.getElementById('applyResult'); applyResult.textContent='publishing...';
+  try{
+    const out=await api('/sites/'+encodeURIComponent(siteId)+'/publish',{method:'POST'});
+    applyResult.textContent='published: '+(out.artifactPath||'');
+  }catch(e){applyResult.textContent='error'; alert(e.message);} 
+};
+
+loadSites().catch(console.error);
+</script>
+</body>
+</html>

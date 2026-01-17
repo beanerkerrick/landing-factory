@@ -1,0 +1,354 @@
+// Landing Factory - Prisma schema (v0.1)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DomainStatus {
+  draft
+  active
+  archived
+}
+
+enum DnsStatus {
+  pending
+  configured
+  failed
+}
+
+enum SslStatus {
+  pending
+  issued
+  failed
+  expiring
+}
+
+enum SiteStatus {
+  draft
+  ready
+  published
+  archived
+}
+
+enum PageType {
+  home
+  about
+  contacts
+  blog_index
+  blog_post
+  news_index
+  news_item
+  catalog_index
+  category
+  product
+  faq
+  generic
+}
+
+enum BuildStatus {
+  queued
+  building
+  ready
+  failed
+  published
+}
+
+enum LinkKind {
+  anchor
+  url_display
+  button
+  mention
+}
+
+enum JobStatus {
+  queued
+  running
+  success
+  failed
+ }
+
+enum AutopostSection {
+  blog
+  news
+}
+
+enum CadenceType {
+  every_n_days
+  weekly
+  cron
+}
+
+model Domain {
+  id            String      @id @default(uuid())
+  domainName    String      @unique
+  status        DomainStatus @default(draft)
+  dr            Float?
+  iks           Float?
+  purchaseDate  DateTime?
+  source        String?
+  notes         String?
+
+  dnsStatus     DnsStatus   @default(pending)
+  sslStatus     SslStatus   @default(pending)
+  lastDnsCheckAt DateTime?
+  lastSslCheckAt DateTime?
+
+  site          Site?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Template {
+  id            String   @id @default(uuid())
+  key           String   @unique
+  name          String
+  siteType      String
+  version       Int      @default(1)
+  definitionJson Json
+  defaultSeoRulesJson Json?
+  defaultPromptJson Json?
+  isActive      Boolean  @default(true)
+
+  sites         Site[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ThemePreset {
+  id           String  @id @default(uuid())
+  name         String
+  json         Json
+  isSystem     Boolean @default(false)
+
+  sites        Site[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ComponentStylePreset {
+  id           String  @id @default(uuid())
+  name         String
+  json         Json
+  isSystem     Boolean @default(false)
+
+  sites        Site[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Site {
+  id           String    @id @default(uuid())
+  domainId     String    @unique
+  domain       Domain    @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  templateId   String
+  template     Template  @relation(fields: [templateId], references: [id])
+
+  themePresetId String?
+  themePreset   ThemePreset? @relation(fields: [themePresetId], references: [id])
+
+  componentStylePresetId String?
+  componentStylePreset   ComponentStylePreset? @relation(fields: [componentStylePresetId], references: [id])
+
+  analyticsProfileId String?
+  analyticsProfile   AnalyticsProfile? @relation(fields: [analyticsProfileId], references: [id])
+
+  title        String?
+  theme        String
+  language     String   @default("ru")
+  region       String?
+  status       SiteStatus @default(draft)
+
+  publishedBuildId String?
+  publishedBuild   Build? @relation("PublishedBuild", fields: [publishedBuildId], references: [id])
+
+  pages        Page[]
+  builds       Build[]
+  links        LinkAssignment[]
+  autopostSchedules AutopostSchedule[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Page {
+  id          String   @id @default(uuid())
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  route       String
+  pageType    PageType @default(generic)
+  slug        String?
+
+  versions    PageVersion[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([siteId, route])
+}
+
+model PageVersion {
+  id           String   @id @default(uuid())
+  pageId       String
+  page         Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  isPublished  Boolean  @default(false)
+
+  contentJson  Json
+  seoJson      Json?
+  schemaJson   Json?
+
+  createdAt    DateTime @default(now())
+
+  @@unique([pageId, versionNumber])
+}
+
+model Build {
+  id           String     @id @default(uuid())
+  siteId       String
+  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  buildNumber  Int
+  status       BuildStatus @default(queued)
+  artifactPath String
+  sitemapPath  String?
+  robotsPath   String?
+  logs         String?
+
+  createdAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  publishedAt  DateTime?
+
+  publishedFor Site?      @relation("PublishedBuild")
+
+  @@unique([siteId, buildNumber])
+}
+
+model LinkLibrary {
+  id           String   @id @default(uuid())
+  name         String
+  targetUrl    String
+  linkKind     LinkKind @default(anchor)
+  defaultAttrsJson Json?
+
+  assignments  LinkAssignment[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AnchorSet {
+  id           String   @id @default(uuid())
+  name         String
+  variantsJson Json
+
+  assignments  LinkAssignment[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model LinkAssignment {
+  id            String   @id @default(uuid())
+  siteId        String
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  pageId        String?
+  page          Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  placement     String
+  linkLibraryId String
+  linkLibrary   LinkLibrary @relation(fields: [linkLibraryId], references: [id])
+
+  anchorSetId   String?
+  anchorSet     AnchorSet? @relation(fields: [anchorSetId], references: [id])
+
+  displayTextOverride String?
+  isEnabled     Boolean @default(true)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Design Import (reference -> theme + component style preset) tracking.
+model DesignImportJob {
+  id          String   @id @default(uuid())
+  inputType   String   // url | screenshots
+  mode        String   // theme | template
+  inputJson   Json
+  status      JobStatus @default(queued)
+  resultJson  Json?
+  logs        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Generic bulk operations log (optional, v1 foundation).
+model BulkOperation {
+  id          String   @id @default(uuid())
+  type        String
+  status      JobStatus @default(queued)
+  inputJson   Json
+  resultJson  Json?
+  diffPreviewJson Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Analytics / verification scripts profile
+model AnalyticsProfile {
+  id            String   @id @default(uuid())
+  name          String
+  scriptsJson   Json     // { head: string[], body_end: string[] }
+  verificationJson Json? // { google: string, bing: string, yandex: string }
+  isSystem      Boolean  @default(false)
+
+  sites         Site[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Autopost schedule per site
+model AutopostSchedule {
+  id            String   @id @default(uuid())
+  siteId        String
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  section       AutopostSection
+  cadenceType   CadenceType
+  cadenceJson   Json
+  requireApproval Boolean @default(false)
+  isEnabled     Boolean  @default(true)
+
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+
+  runs          AutopostRun[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AutopostRun {
+  id            String   @id @default(uuid())
+  scheduleId    String
+  schedule      AutopostSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  status        JobStatus @default(queued)
+  resultJson    Json?
+  logs          String?
+  createdAt     DateTime @default(now())
+  finishedAt    DateTime?
+}

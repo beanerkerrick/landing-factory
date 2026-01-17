@@ -1,0 +1,10 @@
+{
+  "name": "@lf/templates",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "build": "node -e \"console.log('templates ok')\"",
+    "lint": "node -e \"console.log('templates ok')\""
+  }
+}

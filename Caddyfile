@@ -1,0 +1,9 @@
+{
+  # For production with real domains, Caddy will enable Automatic HTTPS by default.
+  # For local testing, you can comment out auto_https and use only :80.
+}
+
+:80 {
+  root * /srv/www/{host}
+  file_server
+}
