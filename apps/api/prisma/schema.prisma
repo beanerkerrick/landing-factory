@@ -168,11 +168,12 @@ model Site {
   region       String?
   status       SiteStatus @default(draft)
 
-  publishedBuildId String?
-  publishedBuild   Build? @relation("PublishedBuild", fields: [publishedBuildId], references: [id])
+  publishedBuildId String? @unique
+  publishedBuild   Build?   @relation("PublishedBuild", fields: [publishedBuildId], references: [id])
+
 
   pages        Page[]
-  builds       Build[]
+  builds       Build[]  @relation("SiteBuilds")
   links        LinkAssignment[]
   autopostSchedules AutopostSchedule[]
 
@@ -195,6 +196,7 @@ model Page {
   updatedAt   DateTime @updatedAt
 
   @@unique([siteId, route])
+  linkAssignments LinkAssignment[]
 }
 
 model PageVersion {
@@ -217,7 +219,7 @@ model PageVersion {
 model Build {
   id           String     @id @default(uuid())
   siteId       String
-  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site   Site   @relation("SiteBuilds", fields: [siteId], references: [id])
 
   buildNumber  Int
   status       BuildStatus @default(queued)
@@ -264,8 +266,8 @@ model LinkAssignment {
   siteId        String
   site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
-  pageId        String?
-  page          Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId String?
+  page   Page?  @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
   placement     String
   linkLibraryId String

@@ -197,6 +197,8 @@ model Page {
 
   @@unique([siteId, route])
   linkAssignments LinkAssignment[]
+
+  @@map("pages")
 }
 
 model PageVersion {
@@ -267,7 +269,7 @@ model LinkAssignment {
   site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   pageId        String?
-  page          Page?    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  page   Page?  @relation(fields: [pageId], references: [id], onDelete: Cascade)
 
   placement     String
   linkLibraryId String
